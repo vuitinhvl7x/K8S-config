@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: full-stack-app-web-chart-monitor
+  labels:
+    release: prometheus-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: full-stack-app
+      app.kubernetes.io/name: web-chart
+  endpoints:
+  - port: http
+    path: /api/metrics
+    scheme: http

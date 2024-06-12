@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: full-stack-app
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+  sources:
+    - repoURL: "https://github.com/vuitinhvl7x/VDT2024-Midterm-frontend"
+      path: web-chart
+      targetRevision: main
+      helm:
+        valueFiles:
+          - $webValues/values.yaml
+    - repoURL: "https://github.com/vuitinhvl7x/VDT2024-web-config"
+      targetRevision: main
+      ref: webValues
+    - repoURL: "https://github.com/vuitinhvl7x/VDT2024-Midterm-api"
+      path: api-chart
+      targetRevision: dev
+      helm:
+        valueFiles:
+          - $apiValues/values.yaml
+    - repoURL: "https://github.com/vuitinhvl7x/VDT2024-api-config"
+      targetRevision: main
+      ref: apiValues

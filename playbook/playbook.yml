@@ -1,0 +1,285 @@
+---
+- hosts: master, worker
+  name: Setup master and worker
+  remote_user: xuanhaj
+  become: true
+  vars:
+    os_version: xUbuntu_22.04
+    crio_version: 1.28
+    k8s_version: 1.29.0-1.1
+  tasks:
+    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#before-you-begin
+    - name: Disable swap
+      shell: swapoff -a
+
+    - name: Remove swap entry from /etc/fstab
+      lineinfile:
+        dest: /etc/fstab
+        regexp: swap
+        state: absent
+
+    - name: Load br_netfilter module
+      shell: |
+        cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+        br_netfilter
+        EOF
+        modprobe overlay
+        modprobe br_netfilter
+
+    - name: Configure iptables to see bridged traffic
+      shell: |
+        cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+        net.bridge.bridge-nf-call-iptables  = 1
+        net.bridge.bridge-nf-call-ip6tables = 1
+        net.ipv4.ip_forward                 = 1
+        EOF
+
+    - name: Read values from all system directories
+      shell: sysctl --system
+
+    # https://v1-28.docs.kubernetes.io/docs/setup/production-environment/container-runtimes/#cri-o
+    - name: Install packages to allow apt to use a repository over HTTPS
+      apt:
+        name:
+          - ca-certificates
+          - gnupg
+          - apt-transport-https
+          - curl
+          - gnupg2
+          - software-properties-common
+        state: present
+        update_cache: yes
+
+    - name: Add GPG key for kubic stable repository
+      apt_key:
+        url: https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ os_version }}/Release.key
+        state: present
+
+    - name: Add GPG key for kubic crio {{ crio_version }} repository
+      apt_key:
+        url: https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:/{{ crio_version }}/{{ os_version }}/Release.key
+        state: present
+
+    - name: Add kubic stable repository
+      apt_repository:
+        repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ os_version }}/ /"
+        state: present
+        filename: devel:kubic:libcontainers:stable.list
+
+    - name: Add kubic crio {{ crio_version }} repository
+      apt_repository:
+        repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ crio_version }}/{{ os_version }}/ /"
+        state: present
+        filename: devel:kubic:libcontainers:stable:cri-o:{{ crio_version }}.list
+
+    - name: Download and add Kubernetes 1.28 GPG key to apt keyring
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-1-28-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-1-28-apt-keyring.gpg
+
+    - name: Add Kubernetes 1.28 repository
+      lineinfile:
+        dest: /etc/apt/sources.list.d/kubernetes-1.28.list
+        line: 'deb [signed-by=/etc/apt/keyrings/kubernetes-1-28-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /'
+        create: yes
+
+    - name: Download and add Kubernetes 1.29 GPG key to apt keyring
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-1-29-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-1-29-apt-keyring.gpg
+
+    - name: Add Kubernetes 1.29 repository
+      lineinfile:
+        dest: /etc/apt/sources.list.d/kubernetes-1.29.list
+        line: 'deb [signed-by=/etc/apt/keyrings/kubernetes-1-29-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /'
+        create: yes
+
+    - name: Update apt packages
+      apt:
+        update_cache: "yes"
+        force_apt_get: "yes"
+
+    - name: Install crio
+      apt:
+        name:
+          - cri-o
+          - cri-o-runc
+        state: present
+        update_cache: yes
+
+    - name: Restart crio
+      systemd:
+        name: crio
+        state: restarted
+        enabled: yes
+        daemon-reload: yes
+
+    # - name: Add Google Cloud public signing key
+    #   apt_key:
+    #     url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    #     state: present
+
+    # - name: Add Kubernetes repository
+    #   apt_repository:
+    #     repo: deb https://pkgs.k8s.io/core:/stable:/v1.28/deb/ kubernetes-xenial main
+    #     state: present
+    #     filename: kubernetes
+    #     mode: 0600
+
+
+    - name: Install kubelet, kubeadm and kubectl
+      apt:
+        name:
+          - kubeadm={{ k8s_version }}
+          - kubectl={{ k8s_version }}
+          - kubelet={{ k8s_version }}
+        state: present
+
+    - name: Enable kubelet service
+      service:
+        name: kubelet
+        enabled: yes
+
+- hosts: master
+  name: Init cluster
+  remote_user: xuanhaj
+  become: true
+  vars:
+    control_plane_endpoint: 192.168.56.61
+    # flannel_version: 0.24.2
+  tasks:
+    - name: Reset existing cluster
+      shell: kubeadm reset -f
+
+    - name: Remove .kube in user home directory
+      shell: rm -rf .kube
+
+    - name: Remove /etc/kubernetes/manifests directory
+      shell: rm -rf /etc/kubernetes/manifests
+
+    - name: Remove /var/lib/etcd directory
+      shell: rm -rf /var/lib/etcd
+
+    # - name: Init kubernetes cluster
+    #   shell: kubeadm init --control-plane-endpoint={{ control_plane_endpoint }}:6443 --upload-certs --apiserver-advertise-address={{ control_plane_endpoint }} --pod-network-cidr=10.244.0.0/16
+
+  
+    # - name: Copy kube-flannel-v{{ flannel_version }}.yml
+    #   copy:
+    #     src: ../kube-flannel-v{{ flannel_version }}.yml
+    #     dest: /home/xuanhaj/kube-flannel-v{{ flannel_version }}.yml
+    #     owner: xuanhaj
+    #     group: xuanhaj
+    #     mode: '0644'
+
+    # - name: Deploy Flannel {{ flannel_version }} network
+    #   shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f kube-flannel-v{{ flannel_version }}.yml
+    
+    - name: Init kubernetes cluster
+      shell: kubeadm init --control-plane-endpoint={{ control_plane_endpoint }}:6443 --upload-certs --apiserver-advertise-address={{ control_plane_endpoint }} --pod-network-cidr=192.168.0.0/16
+      register: kubeadm_init_output
+
+    - name: Install Calico Network Plugin
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f https://docs.projectcalico.org/manifests/calico.yaml
+      register: calico_install_output
+
+    - name: Print Calico install output
+      debug:
+        msg: "{{ calico_install_output.stdout_lines }}"
+
+
+    - name: Print join command
+      shell: kubeadm token create --print-join-command
+      register: kubernetes_join_command
+
+    - name: Copy join command to local
+      become: false
+      local_action: copy content="{{ kubernetes_join_command.stdout_lines[0] }}" dest="/tmp/kubernetes_join_command" mode=0777
+
+    - name: Create directory for kube config
+      file:
+        path: /home/xuanhaj/.kube
+        state: directory
+        owner: xuanhaj
+        group: xuanhaj
+        mode: 0755
+
+    - name: Copy /etc/kubernetes/admin.conf to user home directory
+      become_user: root
+      become_method: sudo
+      become: true
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/xuanhaj/.kube/config
+        remote_src: yes
+        owner: xuanhaj
+        group: xuanhaj
+        mode: '0644'
+
+    # # This got updated after the video
+    # # Because of https://github.com/kubernetes/kubernetes/issues/60835#issuecomment-395931644
+    # - name: Edit kubeadm.conf
+    #   blockinfile:
+    #     path: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+    #     block: |
+    #       Environment="KUBELET_EXTRA_ARGS=--node-ip={{ inventory_hostname }}"
+    # - name: Update kubeadm-flags.env with node IP
+    #   lineinfile:
+    #     path: /var/lib/kubelet/kubeadm-flags.env
+    #     regexp: '^KUBELET_KUBEADM_ARGS='
+    #     line: 'KUBELET_KUBEADM_ARGS=--cgroup-driver=systemd --node-ip={{ inventory_hostname }}'
+    #     create: yes
+
+    - name: Restart kubelet service
+      service:
+        name: kubelet
+        daemon-reload: yes
+        state: restarted
+
+- hosts: worker
+  name: Join worker
+  remote_user: xuanhaj
+  become: true
+  tasks:
+    - name: Reset existing cluster
+      shell: kubeadm reset -f
+
+    - name: Remove .kube in user home directory
+      shell: rm -rf .kube
+
+    - name: Remove /etc/kubernetes/manifests directory
+      shell: rm -rf /etc/kubernetes/manifests
+
+    - name: Copy join command to worker
+      copy:
+        src: /tmp/kubernetes_join_command
+        dest: /tmp/kubernetes_join_command
+        mode: 0777
+
+    - name: Execute worker join command
+      shell: sh /tmp/kubernetes_join_command
+
+    # # This got updated after the video
+    # # Because of https://github.com/kubernetes/kubernetes/issues/60835#issuecomment-395931644
+    # - name: Edit kubeadm.conf
+    #   blockinfile:
+    #     path: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+    #     block: |
+    #       Environment="KUBELET_EXTRA_ARGS=--node-ip={{ inventory_hostname }}"
+    # - name: Update kubeadm-flags.env with node IP
+    #   lineinfile:
+    #     path: /var/lib/kubelet/kubeadm-flags.env
+    #     regexp: '^KUBELET_KUBEADM_ARGS='
+    #     line: 'KUBELET_KUBEADM_ARGS=--cgroup-driver=systemd --node-ip={{ inventory_hostname }}'
+    #     create: yes
+
+    - name: Restart kubelet service
+      service:
+        name: kubelet
+        daemon-reload: yes
+        state: restarted
+
+
+

@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"labels":{"app.kubernetes.io/instance":"full-stack-app","app.kubernetes.io/managed-by":"Helm","app.kubernetes.io/name":"web-chart","app.kubernetes.io/version":"1.16.0","helm.sh/chart":"web-chart-0.1.0"},"name":"full-stack-app-web-chart","namespace":"default"},"spec":{"ports":[{"name":"http","port":80,"protocol":"TCP","targetPort":"http"}],"selector":{"app.kubernetes.io/instance":"full-stack-app","app.kubernetes.io/name":"web-chart"},"type":"NodePort"}}
+  creationTimestamp: "2024-06-12T13:59:57Z"
+  labels:
+    app.kubernetes.io/instance: full-stack-app
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: web-chart
+    app.kubernetes.io/version: 1.16.0
+    helm.sh/chart: web-chart-0.1.0
+  name: full-stack-app-web-chart
+  namespace: default
+  resourceVersion: "120893"
+  uid: 5b93d17b-7f09-4f4c-b9dc-7b49c25e09c9
+spec:
+  clusterIP: 10.97.163.189
+  clusterIPs:
+  - 10.97.163.189
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: http
+    nodePort: 32222
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app.kubernetes.io/instance: full-stack-app
+    app.kubernetes.io/name: web-chart
+  sessionAffinity: None
+  type: NodePort
+status:
+  loadBalancer: {}

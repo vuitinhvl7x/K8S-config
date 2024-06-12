@@ -1,0 +1,6 @@
+# values.yaml
+prometheus:
+  prometheusSpec:
+    service:
+      type: NodePort
+      nodePort: 30090

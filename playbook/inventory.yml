@@ -1,0 +1,12 @@
+all:
+  children:
+    masters:
+      hosts:
+        master:
+          ansible_host: 192.168.56.61
+          ansible_user: xuanhaj
+    workers:
+      hosts:
+        worker:
+          ansible_host: 192.168.56.51
+          ansible_user: xuanhaj

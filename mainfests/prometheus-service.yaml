@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    meta.helm.sh/release-name: prometheus-operator
+    meta.helm.sh/release-namespace: default
+  labels:
+    app: kube-prometheus-stack-prometheus
+    app.kubernetes.io/instance: prometheus-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    app.kubernetes.io/version: 60.1.0
+    chart: kube-prometheus-stack-60.1.0
+    heritage: Helm
+    release: prometheus-operator
+    self-monitor: "true"
+  name: prometheus-operator-kube-p-prometheus
+  namespace: default
+spec:
+  type: NodePort  # Thay đổi từ ClusterIP thành NodePort
+  ports:
+  - name: http-web
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+    nodePort: 30090  # Thêm nodePort để expose
+  - appProtocol: http
+    name: reloader-web
+    port: 8080
+    protocol: TCP
+    targetPort: reloader-web
+    nodePort: 30091  # Thêm nodePort để expose
+  selector:
+    app.kubernetes.io/name: prometheus
+    operator.prometheus.io/name: prometheus-operator-kube-p-prometheus
+  sessionAffinity: None
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  clusterIP: 10.99.161.165
+  clusterIPs:
+  - 10.99.161.165
+status:
+  loadBalancer: {}
